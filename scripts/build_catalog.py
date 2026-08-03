@@ -113,7 +113,12 @@ def _valid_output(path: Path) -> bool:
     )
 
 
-def build(selection: Path, library: Path, reports: Path) -> list[dict[str, Any]]:
+def build(
+    selection: Path,
+    library: Path,
+    reports: Path,
+    local_sources: dict[str, Path] | None = None,
+) -> list[dict[str, Any]]:
     """Process selected, authorized rows and create non-private reports."""
     originals = ensure_writable_directory(library / "originals")
     car_ready = ensure_writable_directory(library / "car-ready")
@@ -155,7 +160,7 @@ def build(selection: Path, library: Path, reports: Path) -> list[dict[str, Any]]
             results.append(result)
             continue
         try:
-            source = _source_for(row, originals)
+            source = (local_sources or {}).get(row["id"]) or _source_for(row, originals)
             if source is None:
                 result["status"] = "NEEDS_LEGAL_SOURCE"
                 result["error"] = "Provide a local purchased/CD-rip file or an explicitly authorized URL."

@@ -96,6 +96,17 @@ python scripts\build_catalog.py
 
 The script copies rather than changes local originals, checks duplicate hashes plus artist/title/duration, creates `library/originals` and categorized `library/car-ready`, and writes the requested reports under `reports`. It never downloads ordinary commercial YouTube videos: only `source_type=authorized_url` plus an explicit rights confirmation permits yt-dlp.
 
+## Local inbox import
+
+Place only audio you are allowed to use in `library/inbox` (the whole `library` tree is Git-ignored). Then run:
+
+```powershell
+python scripts\import_inbox.py --dry-run
+python scripts\import_inbox.py
+```
+
+The importer reads Mutagen tags first and then common `artist - title` filenames. It normalizes full/half-width text, selected common simplified/traditional characters, track prefixes, punctuation, and suffixes such as `Official Audio` or `官方 MV`. Exact or high-confidence matches are ranked per song as FLAC/WAV, then M4A/AAC by bitrate, then MP3. Ambiguous files are never imported; review `reports/match-review.csv` instead. Each run also writes `inbox-scan.csv`, `matched-files.csv`, and `unmatched-files.csv`.
+
 ## YouTube / remote sources
 
 `list` uses yt-dlp metadata-only mode and does not download media. `batch` downloads only rows marked `yes`, `x`, `true`, `1`, or `selected`. It is deliberately the user's responsibility to select only sources they have authorization to download. Cookies, account credentials, API keys, and download archives are neither required nor supported as committed project configuration.
