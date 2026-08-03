@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import shutil
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from car_music_manager.files import (
     is_supported_audio,
     unique_output_path,
 )
+from car_music_manager.library_layout import LibraryLayout
 from car_music_manager.models import TagData
 from car_music_manager.process import process_one
 from car_music_manager.tags import read_tags
@@ -75,16 +77,26 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], fields: list[str]) -> Non
         writer.writerows(rows)
 
 
-def _source_for(row: dict[str, str], originals: Path) -> Path | None:
+def _source_for(row: dict[str, str], temp: Path) -> Path | None:
     source = row["source"].strip()
     if not source or not _enabled(row["rights_confirmed"]):
         return None
     if row["source_type"].strip().casefold() == "authorized_url":
-        return download_authorized(source, originals)
+        return download_authorized(source, temp)
     local = Path(source).expanduser()
     if not local.is_file():
         raise FileNotFoundError(f"Authorized local source does not exist: {local}")
     return local
+
+
+def _publish_original(source: Path, destination: Path, temp: Path) -> Path:
+    """Copy an original through staging and probe it before publishing it once."""
+    with tempfile.TemporaryDirectory(prefix="car-music-original-", dir=temp) as staging_dir:
+        staged = Path(staging_dir) / f"source{source.suffix.lower()}"
+        shutil.copy2(source, staged)
+        analyze_audio(staged)
+        shutil.move(str(staged), str(destination))
+    return destination
 
 
 def _same_record(first: dict[str, Any], second: dict[str, Any]) -> bool:
@@ -118,10 +130,12 @@ def build(
     library: Path,
     reports: Path,
     local_sources: dict[str, Path] | None = None,
+    temp: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Process selected, authorized rows and create non-private reports."""
     originals = ensure_writable_directory(library / "originals")
     car_ready = ensure_writable_directory(library / "car-ready")
+    temp = ensure_writable_directory(temp or library / "temp")
     rows = _read_selection(selection)
     results: list[dict[str, Any]] = []
     duplicates: list[dict[str, Any]] = []
@@ -160,7 +174,7 @@ def build(
             results.append(result)
             continue
         try:
-            source = (local_sources or {}).get(row["id"]) or _source_for(row, originals)
+            source = (local_sources or {}).get(row["id"]) or _source_for(row, temp)
             if source is None:
                 result["status"] = "NEEDS_LEGAL_SOURCE"
                 result["error"] = "Provide a local purchased/CD-rip file or an explicitly authorized URL."
@@ -187,7 +201,7 @@ def build(
             if source.parent != originals:
                 stem = f"{row['id']} - {row['artist']} - {row['title']}"
                 original = unique_output_path(originals, stem, source.suffix.lower())
-                shutil.copy2(source, original)
+                _publish_original(source, original, temp)
             target_dir = ensure_writable_directory(car_ready / row["category"])
             output_stem = f"{row['id']} - {row['artist']} - {row['title']}"
             expected = target_dir / f"{output_stem}.mp3"
@@ -212,7 +226,13 @@ def build(
                 genre=inherited.genre,
                 comment=inherited.comment,
             )
-            output = process_one(original, target_dir, tags=tags, output_stem=output_stem)
+            output = process_one(
+                original,
+                target_dir,
+                tags=tags,
+                output_stem=output_stem,
+                temp_dir=temp,
+            )
             if not _valid_output(output):
                 raise ValueError("Post-process profile/decode validation failed")
             result["status"] = "COMPLETED"
@@ -266,9 +286,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selection", type=Path, default=Path("data/selection.csv"))
     parser.add_argument("--library", type=Path, default=Path("library"))
     parser.add_argument("--reports", type=Path, default=Path("reports"))
+    parser.add_argument("--library-root", type=Path, help="Root containing inbox, originals, car-ready, reports, and temp")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    build(args.selection, args.library, args.reports)
+    if args.library_root:
+        layout = LibraryLayout.from_root(args.library_root).ensure()
+        build(args.selection, layout.root, layout.reports, temp=layout.temp)
+    else:
+        build(args.selection, args.library, args.reports)
     return 0
 
 

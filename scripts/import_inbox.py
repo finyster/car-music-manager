@@ -11,6 +11,7 @@ from typing import Any
 from build_catalog import _enabled, _read_selection, _write_csv, build
 
 from car_music_manager.inbox import MatchDecision, quality_key, scan_and_match
+from car_music_manager.library_layout import LibraryLayout
 
 LOGGER = logging.getLogger(__name__)
 
@@ -93,7 +94,14 @@ def _write_dry_summary(selection: list[dict[str, str]], winners: dict[str, Path]
     )
 
 
-def run(inbox: Path, selection_path: Path, library: Path, reports: Path, dry_run: bool = False) -> int:
+def run(
+    inbox: Path,
+    selection_path: Path,
+    library: Path,
+    reports: Path,
+    dry_run: bool = False,
+    temp: Path | None = None,
+) -> int:
     """Scan inbox, write conservative match reports, and import selected winners."""
     if inbox.exists() and not inbox.is_dir():
         raise ValueError(f"Inbox is not a directory: {inbox}")
@@ -104,7 +112,7 @@ def run(inbox: Path, selection_path: Path, library: Path, reports: Path, dry_run
     if dry_run:
         _write_dry_summary(selection, winners, reports)
         return 0
-    build(selection_path, library, reports, local_sources=winners)
+    build(selection_path, library, reports, local_sources=winners, temp=temp)
     return 0
 
 
@@ -114,9 +122,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selection", type=Path, default=Path("data/selection.csv"))
     parser.add_argument("--library", type=Path, default=Path("library"))
     parser.add_argument("--reports", type=Path, default=Path("reports"))
+    parser.add_argument("--library-root", type=Path, help="Root containing inbox, originals, car-ready, reports, and temp")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    if args.library_root:
+        layout = LibraryLayout.from_root(args.library_root).ensure()
+        return run(
+            layout.inbox,
+            args.selection,
+            layout.root,
+            layout.reports,
+            args.dry_run,
+            layout.temp,
+        )
     return run(args.inbox, args.selection, args.library, args.reports, args.dry_run)
 
 

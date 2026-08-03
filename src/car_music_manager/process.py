@@ -111,6 +111,7 @@ def process_one(
     ffmpeg: str = "ffmpeg",
     tags: TagData | None = None,
     output_stem: str | None = None,
+    temp_dir: Path | None = None,
 ) -> Path:
     """Normalize one source and atomically publish a verified MP3 output.
 
@@ -119,12 +120,13 @@ def process_one(
     """
     options = options or ProcessingOptions()
     output_dir = ensure_writable_directory(output_dir)
+    temp_dir = ensure_writable_directory(temp_dir or output_dir)
     stem = output_stem or source.stem
     final_path = output_dir / f"{stem}.mp3" if overwrite else unique_output_path(output_dir, stem)
     if final_path.exists() and not overwrite:
         raise FileExistsError(final_path)
-    with tempfile.TemporaryDirectory(prefix="car-music-", dir=output_dir) as temp_dir:
-        temporary = Path(temp_dir) / "encoded.mp3"
+    with tempfile.TemporaryDirectory(prefix="car-music-", dir=temp_dir) as temporary_dir:
+        temporary = Path(temporary_dir) / "encoded.mp3"
         measurements = _analysis_pass(source, options, ffmpeg)
         _encode_pass(source, temporary, options, measurements, ffmpeg)
         write_id3v23(temporary, tags or read_tags(source))
