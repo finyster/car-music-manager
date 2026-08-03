@@ -131,6 +131,14 @@ python scripts\search_youtube_candidates.py --library-root "D:\CarMusic"
 
 The script writes `youtube-candidates.csv` and `youtube-review.csv` below the chosen reports directory, retaining at most five non-excluded candidates per song. A visible `ARTIST_TOPIC`, `OFFICIAL_AUDIO`, or `OFFICIAL_MV` signal is only a ranking hint, never download permission. Every candidate remains `NEEDS_LEGAL_SOURCE` until the user records a separately authorized source in `selection.csv`; then `build_catalog.py` can use the existing authorized-source path.
 
+To make the existing candidates easy to inspect without re-searching or downloading anything:
+
+```powershell
+python scripts\generate_youtube_manual_review.py --library-root "D:\CarMusic"
+```
+
+The command first verifies the locked `selection.csv` SHA-256, then writes clickable `youtube-manual-review.html` and `approved-links.csv` to `D:\CarMusic\reports`. The CSV approval column is intentionally blank; a user must explicitly fill it after checking the link, version, and legal source permission.
+
 ## Development
 
 ```powershell
