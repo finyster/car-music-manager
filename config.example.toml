@@ -1,0 +1,12 @@
+# Copy to config.local.toml only if you need non-default executable locations.
+# Never commit config.local.toml: it may contain local paths or downloader settings.
+[tools]
+ffmpeg = "ffmpeg"
+ffprobe = "ffprobe"
+
+[output]
+lufs = -16.0
+true_peak_db = -1.5
+bitrate_kbps = 256
+sample_rate = 44100
+channels = 2
