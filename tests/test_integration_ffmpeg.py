@@ -23,6 +23,8 @@ def test_full_encode_normalize_and_decode(tmp_path: Path) -> None:
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", str(source)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         shell=False,
     )
     assert generated.returncode == 0, generated.stderr

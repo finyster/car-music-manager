@@ -26,7 +26,7 @@ def estimate_output_bytes(info: AudioInfo, options: ProcessingOptions) -> int | 
 
 def check_output_space(output_dir: Path, estimated_bytes: int) -> tuple[int, bool]:
     """Return available bytes and whether capacity is sufficient."""
-    free = psutil.disk_usage(output_dir).free if psutil else shutil.disk_usage(output_dir).free
+    free = psutil.disk_usage(str(output_dir)).free if psutil else shutil.disk_usage(output_dir).free
     return free, free >= estimated_bytes
 
 

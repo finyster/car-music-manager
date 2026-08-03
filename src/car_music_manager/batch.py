@@ -76,7 +76,7 @@ def process_paths(
             )
             results.append(ItemResult(source, "completed", output))
         except Exception as error:
-            LOGGER.exception("Failed to process %s", source)
+            LOGGER.error("Failed to process %s: %s", source, error)
             results.append(ItemResult(source, "failed", error=str(error)))
             if fail_fast:
                 break

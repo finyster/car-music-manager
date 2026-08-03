@@ -27,3 +27,22 @@ def test_process_paths_dry_run_skips_encoder(tmp_path: Path, monkeypatch) -> Non
     )
     results = process_paths([source], output, dry_run=True)
     assert results[0].status == "planned"
+
+
+def test_check_output_space_passes_a_string_to_psutil(tmp_path: Path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class Usage:
+        free = 100
+
+    def disk_usage(path: str) -> Usage:
+        captured["path"] = path
+        return Usage()
+
+    monkeypatch.setattr("car_music_manager.reporting.psutil.disk_usage", disk_usage)
+    from car_music_manager.reporting import check_output_space
+
+    free, enough = check_output_space(tmp_path, 50)
+
+    assert (free, enough) == (100, True)
+    assert captured["path"] == str(tmp_path)
