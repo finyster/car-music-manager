@@ -84,6 +84,18 @@ Copy `config.example.toml` to `config.local.toml`, adjust it, then pass `--confi
 car-music --config config.local.toml process input output
 ```
 
+## 50-song catalog template
+
+`data/selection.csv` is a 50-song candidate template arranged in the five car-library folders. It intentionally contains no URLs or private paths. Every row starts as `selected=yes` and `NEEDS_LEGAL_SOURCE`.
+
+After filling a row with a local purchased download/CD-rip path or an explicitly authorized URL, and setting `rights_confirmed=yes`, build the catalog with:
+
+```powershell
+python scripts\build_catalog.py
+```
+
+The script copies rather than changes local originals, checks duplicate hashes plus artist/title/duration, creates `library/originals` and categorized `library/car-ready`, and writes the requested reports under `reports`. It never downloads ordinary commercial YouTube videos: only `source_type=authorized_url` plus an explicit rights confirmation permits yt-dlp.
+
 ## YouTube / remote sources
 
 `list` uses yt-dlp metadata-only mode and does not download media. `batch` downloads only rows marked `yes`, `x`, `true`, `1`, or `selected`. It is deliberately the user's responsibility to select only sources they have authorization to download. Cookies, account credentials, API keys, and download archives are neither required nor supported as committed project configuration.

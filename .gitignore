@@ -19,5 +19,6 @@ yt-dlp-archive.txt
 output/
 reports/
 downloads/
+library/
 *.part
 *.tmp

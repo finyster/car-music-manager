@@ -50,8 +50,9 @@ def test_process_publishes_only_after_validation(tmp_path: Path, monkeypatch) ->
     monkeypatch.setattr("car_music_manager.process.write_id3v23", lambda *_: order.append("tag"))
     monkeypatch.setattr("car_music_manager.process.read_tags", lambda *_: TagData(title="x"))
 
-    result = process_one(source, output)
+    result = process_one(source, output, output_stem="01 - 歌手 - 歌名")
 
     assert result.exists()
+    assert result.name == "01 - 歌手 - 歌名.mp3"
     assert source.read_bytes() == b"source"
     assert order == ["encode", "tag", "verify"]
