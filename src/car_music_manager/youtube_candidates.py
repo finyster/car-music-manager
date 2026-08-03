@@ -9,14 +9,14 @@ from typing import Any
 from .inbox import normalize_text
 
 _EXCLUDED = re.compile(
-    r"\b(cover|karaoke|ktv|live|concert|remix|sped\s*up|slowed|loop|instrumental)\b|"
-    r"翻唱|伴奏|演唱會|現場|加速|降調|循環",
+    r"\b(cover|karaoke|live|concert|remix|sped\s*up|slowed|loop|instrumental)\b|"
+    r"ktv|\bdj\b|tiktok|翻唱|伴奏|演唱會|現場|舞台|加速|降調|循環|抖音|超級紅人榜|音樂萬萬歲|大頭針ai",
     re.IGNORECASE,
 )
 _OFFICIAL_AUDIO = re.compile(r"official\s*audio|官方\s*(音源|音樂)", re.IGNORECASE)
 _OFFICIAL_MV = re.compile(r"official\s*(mv|music\s*video)|官方\s*mv", re.IGNORECASE)
 _TOPIC = re.compile(r"\btopic\b", re.IGNORECASE)
-_LABEL_CHANNEL = re.compile(r"\b(official|records?|music|vevo)\b|唱片|娛樂", re.IGNORECASE)
+_LABEL_CHANNEL = re.compile(r"\b(official|records?|vevo|warner)\b|華納|唱片|娛樂", re.IGNORECASE)
 
 
 @dataclass(frozen=True)

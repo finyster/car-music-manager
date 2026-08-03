@@ -11,6 +11,10 @@ from car_music_manager.youtube_candidates import (
 
 def test_excludes_non_studio_candidate_titles() -> None:
     assert is_excluded("Song Name (Live Concert)")
+    assert is_excluded("陳雷 - 歡喜就好【KTV導唱字幕】")
+    assert is_excluded("超級紅人榜 陳雷 - 歡喜就好")
+    assert is_excluded("末班車 DJ 2020")
+    assert is_excluded("末班車/大頭針Ai")
     assert is_excluded("歌曲 翻唱")
     assert not is_excluded("Song Name (Official Audio)")
 
