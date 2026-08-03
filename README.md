@@ -139,6 +139,14 @@ python scripts\generate_youtube_manual_review.py --library-root "D:\CarMusic"
 
 The command first verifies the locked `selection.csv` SHA-256, then writes clickable `youtube-manual-review.html` and `approved-links.csv` to `D:\CarMusic\reports`. The CSV approval column is intentionally blank; a user must explicitly fill it after checking the link, version, and legal source permission.
 
+After explicitly confirming download rights for every current recommended link, use the existing safe build path without changing `selection.csv`:
+
+```powershell
+python scripts\import_approved_links.py --library-root "D:\CarMusic" --confirm-authorized
+```
+
+The command creates only a temporary authorization manifest under `D:\CarMusic\temp`; each downloaded source is preserved in `originals` and only published to `car-ready` after the established normalization and decode verification.
+
 ## Development
 
 ```powershell

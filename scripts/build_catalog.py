@@ -125,6 +125,16 @@ def _valid_output(path: Path) -> bool:
     )
 
 
+def _existing_original(originals: Path, output_stem: str) -> Path | None:
+    """Return the previously published original for a resumable catalog item."""
+    for candidate in originals.glob(f"{output_stem}.*"):
+        # yt-dlp may retain an authorized source as WebM, which FFmpeg can
+        # process even though WebM is not one of the inbox import formats.
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def build(
     selection: Path,
     library: Path,
@@ -174,7 +184,23 @@ def build(
             results.append(result)
             continue
         try:
-            source = (local_sources or {}).get(row["id"]) or _source_for(row, temp)
+            target_dir = ensure_writable_directory(car_ready / row["category"])
+            output_stem = f"{row['id']} - {row['artist']} - {row['title']}"
+            expected = target_dir / f"{output_stem}.mp3"
+            if expected.exists():
+                if _valid_output(expected):
+                    result["status"] = "SKIPPED_COMPLETE"
+                    result["output"] = str(expected)
+                else:
+                    result["status"] = "OUTPUT_EXISTS_UNVERIFIED"
+                    result["error"] = "Existing output is not a verified target MP3; it was left unchanged."
+                results.append(result)
+                continue
+            source = (
+                (local_sources or {}).get(row["id"])
+                or _existing_original(originals, output_stem)
+                or _source_for(row, temp)
+            )
             if source is None:
                 result["status"] = "NEEDS_LEGAL_SOURCE"
                 result["error"] = "Provide a local purchased/CD-rip file or an explicitly authorized URL."
@@ -189,7 +215,14 @@ def build(
                 "sha256": _sha256(source),
                 "duration": info.duration_seconds,
             }
-            duplicate = next((previous for previous in known if _same_record(previous, record)), None)
+            duplicate = next(
+                (
+                    previous
+                    for previous in known
+                    if Path(previous["source"]) != source and _same_record(previous, record)
+                ),
+                None,
+            )
             if duplicate:
                 result["status"] = "DUPLICATE"
                 result["error"] = f"Duplicates catalog item {duplicate['id']}"
@@ -202,18 +235,6 @@ def build(
                 stem = f"{row['id']} - {row['artist']} - {row['title']}"
                 original = unique_output_path(originals, stem, source.suffix.lower())
                 _publish_original(source, original, temp)
-            target_dir = ensure_writable_directory(car_ready / row["category"])
-            output_stem = f"{row['id']} - {row['artist']} - {row['title']}"
-            expected = target_dir / f"{output_stem}.mp3"
-            if expected.exists():
-                if _valid_output(expected):
-                    result["status"] = "SKIPPED_COMPLETE"
-                    result["output"] = str(expected)
-                else:
-                    result["status"] = "OUTPUT_EXISTS_UNVERIFIED"
-                    result["error"] = "Existing output is not a verified target MP3; it was left unchanged."
-                results.append(result)
-                continue
             inherited = read_tags(original)
             tags = TagData(
                 title=row["title"],

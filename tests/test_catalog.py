@@ -41,6 +41,17 @@ def test_catalog_template_has_fifty_selected_candidates() -> None:
     assert all(row["status"] == "NEEDS_LEGAL_SOURCE" for row in rows)
 
 
+def test_existing_original_is_reused_for_an_interrupted_catalog_item(tmp_path: Path) -> None:
+    module = _load_catalog_module()
+    originals = tmp_path / "originals"
+    originals.mkdir()
+    original = originals / "21 - 任賢齊 - 心太軟.webm"
+    original.touch()
+    (originals / "21 - 任賢齊 - 心太軟 (2).webm").touch()
+
+    assert module._existing_original(originals, "21 - 任賢齊 - 心太軟") == original
+
+
 def test_catalog_template_is_locked_to_original_fifty() -> None:
     selection = Path(__file__).parents[1] / "data" / "selection.csv"
     with selection.open(newline="", encoding="utf-8") as handle:

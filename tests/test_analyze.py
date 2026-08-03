@@ -8,7 +8,13 @@ def test_analyze_audio_parses_ffprobe_payload(monkeypatch) -> None:
     payload = {
         "format": {"format_name": "mp3", "duration": "123.4", "bit_rate": "256000"},
         "streams": [
-            {"codec_type": "audio", "codec_name": "mp3", "sample_rate": "44100", "channels": 2}
+            {
+                "codec_type": "audio",
+                "codec_name": "mp3",
+                "sample_rate": "44100",
+                "channels": 2,
+                "bit_rate": "256000",
+            }
         ],
     }
     monkeypatch.setattr("car_music_manager.analyze.ffprobe_json", lambda *_: payload)
@@ -19,6 +25,16 @@ def test_analyze_audio_parses_ffprobe_payload(monkeypatch) -> None:
     assert info.bitrate_bps == 256000
     assert info.sample_rate == 44100
     assert info.channels == 2
+
+
+def test_analyze_audio_falls_back_to_container_bitrate(monkeypatch) -> None:
+    payload = {
+        "format": {"format_name": "flac", "duration": "2.0", "bit_rate": "987654"},
+        "streams": [{"codec_type": "audio", "codec_name": "flac"}],
+    }
+    monkeypatch.setattr("car_music_manager.analyze.ffprobe_json", lambda *_: payload)
+
+    assert analyze_audio(Path("sample.flac")).bitrate_bps == 987654
 
 
 def test_run_command_uses_argument_list_without_shell(monkeypatch) -> None:
