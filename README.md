@@ -123,6 +123,14 @@ With `--library-root "D:\CarMusic"`, reports are written to `D:\CarMusic\reports
 
 `list` uses yt-dlp metadata-only mode and does not download media. `batch` downloads only rows marked `yes`, `x`, `true`, `1`, or `selected`. It is deliberately the user's responsibility to select only sources they have authorization to download. Cookies, account credentials, API keys, and download archives are neither required nor supported as committed project configuration.
 
+To create a review-only candidate report for the catalog without downloading media:
+
+```powershell
+python scripts\search_youtube_candidates.py --library-root "D:\CarMusic"
+```
+
+The script writes `youtube-candidates.csv` and `youtube-review.csv` below the chosen reports directory, retaining at most five non-excluded candidates per song. A visible `ARTIST_TOPIC`, `OFFICIAL_AUDIO`, or `OFFICIAL_MV` signal is only a ranking hint, never download permission. Every candidate remains `NEEDS_LEGAL_SOURCE` until the user records a separately authorized source in `selection.csv`; then `build_catalog.py` can use the existing authorized-source path.
+
 ## Development
 
 ```powershell
