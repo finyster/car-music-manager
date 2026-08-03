@@ -39,3 +39,4 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"] # Ruff formatter is authoritative for line wrapping.
