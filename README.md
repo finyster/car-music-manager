@@ -147,6 +147,16 @@ python scripts\import_approved_links.py --library-root "D:\CarMusic" --confirm-a
 
 The command creates only a temporary authorization manifest under `D:\CarMusic\temp`; each downloaded source is preserved in `originals` and only published to `car-ready` after the established normalization and decode verification.
 
+## Verified USB export
+
+Export the already verified MP3 library to a Toyota-friendly flat `Music` folder with:
+
+```powershell
+python scripts\export_usb.py --source "<car-ready-folder>" --auto-usb --folder "Music" --layout flat --verify --report-root "<reports-folder>"
+```
+
+The exporter detects Windows removable volumes through the OS and continues only when exactly one is present. It never formats, clears, deletes, or overwrites USB data. Before copying, it validates every source as a decodable 44.1 kHz stereo MP3 near 256 kbps and confirms the USB will retain 500 MB free space. Files are staged as `.copying`, then hash-, profile-, size-, and decode-verified before their final rename. Reports are `usb-export.csv` and `usb-export-summary.md` under the supplied report folder.
+
 ## Development
 
 ```powershell
