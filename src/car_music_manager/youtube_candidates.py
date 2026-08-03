@@ -31,6 +31,7 @@ class YoutubeCandidate:
     duration: int | None
     upload_date: str | None
     official_signal: str
+    title_match: str
     priority: int
 
 
@@ -71,6 +72,8 @@ def candidate_from_entry(artist: str, title: str, entry: dict[str, Any]) -> Yout
     if len(normalized_title) < 2 and normalized_artist not in normalized_context:
         return None
     signal, priority = official_signal(video_title, channel, artist)
+    artist_removed = normalized_video.replace(normalized_artist, "") if normalized_artist else normalized_video
+    title_match = "EXACT_TITLE" if artist_removed == normalized_title else "NAME_REVIEW"
     video_id = entry.get("id")
     url = str(entry.get("webpage_url") or entry.get("url") or "").strip()
     if not url and video_id:
@@ -87,6 +90,7 @@ def candidate_from_entry(artist: str, title: str, entry: dict[str, Any]) -> Yout
         duration=int(duration) if isinstance(duration, (int, float)) else None,
         upload_date=str(entry["upload_date"]) if entry.get("upload_date") else None,
         official_signal=signal,
+        title_match=title_match,
         priority=priority,
     )
 

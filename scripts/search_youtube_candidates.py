@@ -27,6 +27,7 @@ def _candidate_row(catalog_id: str, candidate: YoutubeCandidate, rank: int) -> d
         "duration": candidate.duration or "",
         "upload_date": candidate.upload_date or "",
         "official_signal": candidate.official_signal,
+        "title_match": candidate.title_match,
         "best_candidate": "yes" if rank == 1 else "",
         "authorization_status": "NEEDS_LEGAL_SOURCE",
     }
@@ -46,6 +47,12 @@ def search(selection_path: Path, reports: Path, max_candidates: int = 5) -> list
         for rank, candidate in enumerate(found, start=1):
             candidates.append(_candidate_row(row["id"], candidate, rank))
         best = found[0] if found else None
+        review_reasons = []
+        if best and best.official_signal == "UNVERIFIED":
+            review_reasons.append("UNVERIFIED_CHANNEL")
+        if best and best.title_match != "EXACT_TITLE":
+            review_reasons.append("NAME_REVIEW")
+        review_status = "MANUAL_REVIEW" if review_reasons else "CANDIDATE_FOUND"
         review.append(
             {
                 "id": row["id"],
@@ -53,8 +60,12 @@ def search(selection_path: Path, reports: Path, max_candidates: int = 5) -> list
                 "title": row["title"],
                 "best_url": best.url if best else "",
                 "official_signal": best.official_signal if best else "NO_CANDIDATE",
+                "title_match": best.title_match if best else "NO_CANDIDATE",
+                "review_status": review_status if best else "MANUAL_REVIEW",
                 "authorization_status": "NEEDS_LEGAL_SOURCE",
-                "action": "Review candidate; add only a separately authorized source to selection.csv.",
+                "action": "; ".join(review_reasons)
+                if review_reasons
+                else "Review candidate; add only a separately authorized source to selection.csv.",
             }
         )
     candidate_fields = [
@@ -68,6 +79,7 @@ def search(selection_path: Path, reports: Path, max_candidates: int = 5) -> list
         "duration",
         "upload_date",
         "official_signal",
+        "title_match",
         "best_candidate",
         "authorization_status",
     ]
@@ -75,7 +87,17 @@ def search(selection_path: Path, reports: Path, max_candidates: int = 5) -> list
     _write_csv(
         reports / "youtube-review.csv",
         review,
-        ["id", "artist", "title", "best_url", "official_signal", "authorization_status", "action"],
+        [
+            "id",
+            "artist",
+            "title",
+            "best_url",
+            "official_signal",
+            "title_match",
+            "review_status",
+            "authorization_status",
+            "action",
+        ],
     )
     return review
 

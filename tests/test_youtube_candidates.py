@@ -46,6 +46,7 @@ def test_candidate_captures_required_metadata_without_download() -> None:
     assert candidate.url == "https://www.youtube.com/watch?v=abc123"
     assert candidate.duration == 210
     assert candidate.upload_date == "20240101"
+    assert candidate.title_match == "EXACT_TITLE"
 
 
 def test_candidate_rejects_unrelated_title_even_from_ranked_channel() -> None:
@@ -73,6 +74,7 @@ def test_search_report_marks_all_candidates_as_needing_legal_source(tmp_path: Pa
             duration=200,
             upload_date="20240101",
             official_signal="ARTIST_TOPIC",
+            title_match="EXACT_TITLE",
             priority=40,
         )
         monkeypatch.setattr(search_youtube_candidates, "search_youtube", lambda *_: [candidate])
