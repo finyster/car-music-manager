@@ -19,12 +19,12 @@ def test_canonical_source_key_matches_youtube_music_and_youtube() -> None:
     assert canonical_source_key(short) == canonical_source_key(music)
 
 
-def test_canonical_source_key_matches_artist_hosts() -> None:
+def test_canonical_source_key_matches_artist_hosts_and_tabs() -> None:
     music = "https://music.youtube.com/@ExampleArtist?si=tracking"
     regular = "https://www.youtube.com/@ExampleArtist/videos"
 
     assert canonical_source_key(music) == "youtube:page:/@exampleartist"
-    assert canonical_source_key(regular) == "youtube:page:/@exampleartist/videos"
+    assert canonical_source_key(regular) == canonical_source_key(music)
 
 
 def test_track_key_normalizes_unicode_spacing_and_punctuation() -> None:
