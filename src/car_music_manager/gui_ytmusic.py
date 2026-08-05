@@ -1,4 +1,4 @@
-"""YouTube Music enhanced desktop interface with automatic artwork support."""
+"""YouTube Music enhanced desktop interface with artwork and duplicate filtering."""
 
 from __future__ import annotations
 
@@ -22,6 +22,14 @@ from PySide6.QtWidgets import (
 )
 
 from .artwork import download_artwork
+from .dedupe import (
+    DedupeIndex,
+    canonical_source_key,
+    durations_match,
+    scan_existing_track_keys,
+    sha256_file,
+    track_key,
+)
 from .gui import GuiTrack, MainWindow, parse_batch_urls, split_artist_title
 from .models import ProcessingOptions, TagData
 from .process import process_one
@@ -51,7 +59,7 @@ class YTMusicMetadataLoader(QThread):
 
 
 class ArtworkProcessingWorker(QThread):
-    """Process selected audio and add manual or per-track YouTube Music artwork."""
+    """Process selected audio with artwork and persistent duplicate filtering."""
 
     progress = Signal(int, int, str)
     row_finished = Signal(int, str, str)
@@ -63,11 +71,18 @@ class ArtworkProcessingWorker(QThread):
         jobs: list[dict[str, object]],
         destination: Path,
         manual_artwork: Path | None,
+        *,
+        dedupe_enabled: bool,
     ) -> None:
         super().__init__()
         self.jobs = jobs
         self.destination = destination
         self.manual_artwork = manual_artwork
+        self.dedupe_enabled = dedupe_enabled
+
+    def _skip_duplicate(self, row: int, reason: str) -> None:
+        self.row_finished.emit(row, "重複略過", reason)
+        self.artwork_finished.emit(row, "略過", reason)
 
     def run(self) -> None:  # noqa: D102
         completed = 0
@@ -75,6 +90,11 @@ class ArtworkProcessingWorker(QThread):
         failed = 0
         options = ProcessingOptions()
         self.destination.mkdir(parents=True, exist_ok=True)
+        index = DedupeIndex.load(self.destination)
+        known_tracks = index.track_keys | scan_existing_track_keys(self.destination)
+        batch_sources: set[str] = set()
+        batch_hashes: set[str] = set()
+        batch_tracks: set[str] = set()
 
         with tempfile.TemporaryDirectory(prefix="car-music-gui-") as temporary_directory:
             temporary_root = Path(temporary_directory)
@@ -88,6 +108,22 @@ class ArtworkProcessingWorker(QThread):
                 try:
                     source_type = str(job["source_type"])
                     source_value = str(job["source"])
+                    source_identity = canonical_source_key(source_value)
+                    track_identity = track_key(str(job["artist"]), title)
+
+                    if self.dedupe_enabled and source_identity and (
+                        source_identity in index.source_keys or source_identity in batch_sources
+                    ):
+                        skipped += 1
+                        self._skip_duplicate(row, "相同來源已經處理過")
+                        continue
+                    if self.dedupe_enabled and track_identity and (
+                        track_identity in known_tracks or track_identity in batch_tracks
+                    ):
+                        skipped += 1
+                        self._skip_duplicate(row, "目的資料夾已有相同歌手與歌名")
+                        continue
+
                     if source_type == "YouTube":
                         if not bool(job["rights_confirmed"]):
                             skipped += 1
@@ -103,19 +139,30 @@ class ArtworkProcessingWorker(QThread):
                         if not source_path.exists():
                             raise FileNotFoundError(source_path)
 
+                    content_hash = sha256_file(source_path)
+                    if self.dedupe_enabled and (
+                        content_hash in index.content_sha256 or content_hash in batch_hashes
+                    ):
+                        skipped += 1
+                        self._skip_duplicate(row, "來源檔案內容完全相同（SHA-256）")
+                        continue
+
                     artwork_source = "manual" if self.manual_artwork else str(
                         job.get("artwork_source") or "none"
                     )
+                    comment_parts = [
+                        "Prepared by car-music-manager GUI",
+                        f"cover_source={artwork_source}",
+                    ]
+                    if source_identity:
+                        comment_parts.append(f"source_key={source_identity}")
                     tags = TagData(
                         title=title,
                         artist=str(job["artist"]) or None,
                         album=str(job["album"]) or None,
                         album_artist=str(job["artist"]) or None,
                         track_number=str(job["track_number"]),
-                        comment=(
-                            "Prepared by car-music-manager GUI; "
-                            f"cover_source={artwork_source}"
-                        ),
+                        comment="; ".join(comment_parts),
                     )
                     output = process_one(
                         source_path,
@@ -146,6 +193,17 @@ class ArtworkProcessingWorker(QThread):
                         artwork_warning = f"封面處理失敗：{artwork_error}"
                         self.artwork_finished.emit(row, "封面失敗", artwork_warning)
 
+                    index.add(
+                        source_key=source_identity,
+                        content_hash=content_hash,
+                        track=track_identity,
+                    )
+                    index.save(self.destination)
+                    batch_sources.add(source_identity)
+                    batch_hashes.add(content_hash)
+                    batch_tracks.add(track_identity)
+                    known_tracks.add(track_identity)
+
                     completed += 1
                     if artwork_warning:
                         self.row_finished.emit(
@@ -163,7 +221,7 @@ class ArtworkProcessingWorker(QThread):
 
 
 class YTMusicMainWindow(MainWindow):
-    """Main window with dedicated YouTube Music metadata and artwork workflows."""
+    """Main window with YouTube Music, artwork, and duplicate workflows."""
 
     COL_ARTWORK = 10
 
@@ -172,6 +230,9 @@ class YTMusicMainWindow(MainWindow):
         self.setWindowTitle("Car Music Manager — YouTube Music")
         self.ytmusic_loader: YTMusicMetadataLoader | None = None
         self.ytmusic_artwork_urls: dict[int, str] = {}
+        self.source_identity_rows: dict[str, int] = {}
+        self.track_identity_rows: dict[str, list[tuple[int, int | None]]] = {}
+        self.import_duplicates_skipped = 0
         self._install_artwork_column()
         self._install_ytmusic_controls()
 
@@ -210,10 +271,19 @@ class YTMusicMainWindow(MainWindow):
         self.auto_artwork_checkbox.setToolTip(
             "處理歌曲時下載該曲目的 YouTube Music 圖片，轉成 500×500 JPEG 後嵌入 MP3。"
         )
-        note = QLabel("讀取只抓 Metadata；封面在處理時才下載，失敗不影響音訊輸出。")
+        self.auto_dedupe_checkbox = QCheckBox("自動略過重複歌曲")
+        self.auto_dedupe_checkbox.setChecked(
+            str(self.settings.value("auto_dedupe", "true")).casefold()
+            not in {"false", "0", "no"}
+        )
+        self.auto_dedupe_checkbox.setToolTip(
+            "依 YouTube ID、來源網址、歌手＋歌名與來源檔 SHA-256 過濾重複。"
+        )
+        note = QLabel("讀取只抓 Metadata；封面與重複檢查在處理時安全執行。")
         note.setWordWrap(True)
         row.addWidget(button)
         row.addWidget(self.auto_artwork_checkbox)
+        row.addWidget(self.auto_dedupe_checkbox)
         row.addWidget(note, 1)
         layout.addLayout(row)
         self.url_input.setPlaceholderText(
@@ -227,6 +297,8 @@ class YTMusicMainWindow(MainWindow):
                 "auto_ytmusic_artwork",
                 self.auto_artwork_checkbox.isChecked(),
             )
+        if hasattr(self, "auto_dedupe_checkbox"):
+            self.settings.setValue("auto_dedupe", self.auto_dedupe_checkbox.isChecked())
         super().closeEvent(event)
 
     def load_ytmusic_urls(self) -> None:
@@ -252,15 +324,43 @@ class YTMusicMainWindow(MainWindow):
         self.ytmusic_loader.loaded.connect(self._ytmusic_metadata_loaded)
         self.ytmusic_loader.start()
 
+    def _metadata_loaded(self, entries: object, errors: object) -> None:
+        source_entries = list(entries)  # type: ignore[arg-type]
+        added = 0
+        duplicates_before = self.import_duplicates_skipped
+        for entry in source_entries:
+            artist, title = split_artist_title(entry.title, entry.uploader)
+            row = self.add_track(
+                GuiTrack(
+                    source=entry.source,
+                    source_type="YouTube",
+                    title=title,
+                    artist=artist,
+                    duration_seconds=entry.duration_seconds,
+                    uploader=entry.uploader or "",
+                )
+            )
+            if row is not None:
+                added += 1
+        duplicate_count = self.import_duplicates_skipped - duplicates_before
+        error_messages = list(errors)  # type: ignore[arg-type]
+        self.status_label.setText(
+            f"已加入 {added} 首｜重複略過 {duplicate_count}｜錯誤 {len(error_messages)}"
+        )
+        if error_messages:
+            QMessageBox.warning(self, "部分來源讀取失敗", "\n".join(error_messages[:10]))
+
     def _ytmusic_metadata_loaded(self, entries: object, errors: object) -> None:
         source_entries = list(entries)  # type: ignore[arg-type]
+        added = 0
+        artwork_added = 0
+        duplicates_before = self.import_duplicates_skipped
         for entry in source_entries:
             artist = entry.artist.strip()
             title = entry.title.strip()
             if not artist:
                 artist, title = split_artist_title(title, entry.uploader)
-            row = self.table.rowCount()
-            self.add_track(
+            row = self.add_track(
                 GuiTrack(
                     source=entry.source,
                     source_type="YT Music",
@@ -271,26 +371,50 @@ class YTMusicMainWindow(MainWindow):
                     uploader=entry.uploader,
                 )
             )
+            if row is None:
+                continue
+            added += 1
             artwork_url = entry.thumbnail_url.strip()
             if artwork_url:
                 self.ytmusic_artwork_urls[row] = artwork_url
                 self.table.item(row, self.COL_ARTWORK).setText("可自動抓取")
                 self.table.item(row, self.COL_ARTWORK).setToolTip(artwork_url)
+                artwork_added += 1
             else:
                 self.table.item(row, self.COL_ARTWORK).setText("來源無圖片")
 
+        duplicate_count = self.import_duplicates_skipped - duplicates_before
         error_messages = list(errors)  # type: ignore[arg-type]
-        artwork_count = sum(
-            1 for row in range(self.table.rowCount()) if row in self.ytmusic_artwork_urls
-        )
         self.status_label.setText(
-            f"YouTube Music 已加入 {len(source_entries)} 首；"
-            f"可抓封面 {artwork_count}；錯誤 {len(error_messages)}"
+            f"YT Music 已加入 {added} 首｜可抓封面 {artwork_added}｜"
+            f"重複略過 {duplicate_count}｜錯誤 {len(error_messages)}"
         )
         if error_messages:
             QMessageBox.warning(self, "部分 YouTube Music 來源讀取失敗", "\n".join(error_messages[:10]))
 
-    def add_track(self, track: GuiTrack) -> None:
+    def _probable_duplicate_row(self, track: GuiTrack) -> int | None:
+        identity = track_key(track.artist, track.title)
+        if not identity:
+            return None
+        for row, duration in self.track_identity_rows.get(identity, []):
+            if durations_match(duration, track.duration_seconds):
+                return row
+        return None
+
+    def add_track(self, track: GuiTrack) -> int | None:
+        dedupe_enabled = not hasattr(self, "auto_dedupe_checkbox") or (
+            self.auto_dedupe_checkbox.isChecked()
+        )
+        source_identity = canonical_source_key(track.source)
+        if dedupe_enabled and source_identity and source_identity in self.source_identity_rows:
+            self.import_duplicates_skipped += 1
+            return None
+
+        duplicate_row = self._probable_duplicate_row(track) if dedupe_enabled else None
+        if duplicate_row is not None:
+            self.import_duplicates_skipped += 1
+            return None
+
         row = self.table.rowCount()
         if track.source_type == "YT Music":
             super().add_track(replace(track, source_type="YouTube"))
@@ -302,6 +426,15 @@ class YTMusicMainWindow(MainWindow):
         else:
             super().add_track(track)
         self.table.setItem(row, self.COL_ARTWORK, QTableWidgetItem("無"))
+
+        if source_identity:
+            self.source_identity_rows[source_identity] = row
+        identity = track_key(track.artist, track.title)
+        if identity:
+            self.track_identity_rows.setdefault(identity, []).append(
+                (row, track.duration_seconds)
+            )
+        return row
 
     def _selected_jobs(self) -> list[dict[str, object]]:
         jobs = super()._selected_jobs()
@@ -344,7 +477,12 @@ class YTMusicMainWindow(MainWindow):
         self.cancel_button.setEnabled(True)
         self.progress.setRange(0, len(jobs))
         self.progress.setValue(0)
-        self.processor = ArtworkProcessingWorker(jobs, destination, self.artwork_path)
+        self.processor = ArtworkProcessingWorker(
+            jobs,
+            destination,
+            self.artwork_path,
+            dedupe_enabled=self.auto_dedupe_checkbox.isChecked(),
+        )
         self.processor.progress.connect(self._processing_progress)
         self.processor.row_finished.connect(self._row_finished)
         self.processor.artwork_finished.connect(self._artwork_finished)
