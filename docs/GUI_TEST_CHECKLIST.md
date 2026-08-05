@@ -4,6 +4,13 @@
 - [ ] 可貼上單一影片、播放清單及頻道網址。
 - [ ] 可一次貼上多個網址。
 - [ ] 可加入本機檔案與本機資料夾。
+- [ ] 一般 YouTube 網址可由「讀取網址」載入 metadata。
+- [ ] YouTube Music 歌曲網址可由「讀取 YouTube Music」載入。
+- [ ] YouTube Music 播放清單／專輯網址可載入多首曲目。
+- [ ] YouTube Music 藝人網址可透過 `/videos` metadata fallback 載入。
+- [ ] `si` 追蹤參數不影響 YouTube Music 讀取。
+- [ ] 非 `music.youtube.com` 網址在 YT Music 專用流程中會被安全略過。
+- [ ] YT Music 列顯示來源、歌手、歌名、專輯、長度與頻道。
 - [ ] 表格可以勾選、全選、全不選及搜尋。
 - [ ] 歌手、歌名、專輯欄位可修改。
 - [ ] 可選擇輸出目的地並新增子資料夾。
