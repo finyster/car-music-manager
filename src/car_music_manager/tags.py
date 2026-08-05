@@ -1,11 +1,26 @@
-"""Metadata extraction and ID3v2.3 writing."""
+"""Metadata extraction, ID3v2.3 writing, and compatible artwork embedding."""
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 from mutagen import File
-from mutagen.id3 import COMM, ID3, TALB, TCON, TDRC, TIT2, TPE1, TPE2, TPOS, TRCK
+from mutagen.id3 import (
+    APIC,
+    COMM,
+    ID3,
+    TALB,
+    TCON,
+    TDRC,
+    TIT2,
+    TPE1,
+    TPE2,
+    TPOS,
+    TRCK,
+    ID3NoHeaderError,
+)
+from PIL import Image
 
 from .models import TagData
 
@@ -58,3 +73,40 @@ def write_id3v23(path: Path, tags: TagData) -> None:
     if tags.comment:
         id3.add(COMM(encoding=1, lang="eng", desc="", text=tags.comment))
     id3.save(path, v2_version=3)
+
+
+def _open_id3(path: Path) -> ID3:
+    try:
+        return ID3(path)
+    except ID3NoHeaderError:
+        return ID3()
+
+
+def embed_artwork_jpeg(mp3_path: Path, jpeg_data: bytes) -> None:
+    """Embed already-normalized JPEG bytes as the front cover in ID3v2.3."""
+    if not jpeg_data.startswith(b"\xff\xd8"):
+        raise ValueError("artwork data is not JPEG")
+    id3 = _open_id3(mp3_path)
+    id3.delall("APIC")
+    id3.add(
+        APIC(
+            encoding=3,
+            mime="image/jpeg",
+            type=3,
+            desc="Cover",
+            data=jpeg_data,
+        )
+    )
+    id3.save(mp3_path, v2_version=3)
+
+
+def embed_artwork(mp3_path: Path, artwork_path: Path, *, max_size: int = 500) -> None:
+    """Convert an image to a compact JPEG and embed it as ID3v2.3 cover art."""
+    if max_size < 1:
+        raise ValueError("max_size must be positive")
+    with Image.open(artwork_path) as source:
+        image = source.convert("RGB")
+        image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=88, optimize=True)
+    embed_artwork_jpeg(mp3_path, buffer.getvalue())
