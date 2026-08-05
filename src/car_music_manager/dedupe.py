@@ -31,11 +31,12 @@ _YOUTUBE_HOSTS = {
     "youtube.com",
 }
 _VIDEO_PATH_PREFIXES = ("/embed/", "/live/", "/shorts/")
+_CHANNEL_TAB_SUFFIXES = ("/featured", "/playlists", "/shorts", "/streams", "/videos")
 
 
 def _normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold().strip()
-    return re.sub(r"[^\w]+", "", normalized, flags=re.UNICODE)
+    return re.sub(r"[\W_]+", "", normalized, flags=re.UNICODE)
 
 
 def track_key(artist: str, title: str) -> str:
@@ -56,6 +57,14 @@ def durations_match(
     if first is None or second is None:
         return False
     return abs(int(first) - int(second)) <= tolerance_seconds
+
+
+def _normalize_youtube_page_path(path: str) -> str:
+    normalized = path.casefold()
+    for suffix in _CHANNEL_TAB_SUFFIXES:
+        if normalized.endswith(suffix):
+            return normalized[: -len(suffix)] or "/"
+    return normalized
 
 
 def canonical_source_key(value: str) -> str:
@@ -96,7 +105,7 @@ def canonical_source_key(value: str) -> str:
         playlist_id = query.get("list", "")
         if path == "/playlist" and playlist_id:
             return f"youtube:playlist:{playlist_id}"
-        return f"youtube:page:{path.casefold()}"
+        return f"youtube:page:{_normalize_youtube_page_path(path)}"
 
     filtered_query = sorted(
         (key, item)
