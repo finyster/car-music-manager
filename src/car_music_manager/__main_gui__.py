@@ -1,7 +1,5 @@
 """Module entry point for the desktop application."""
 
-from __future__ import annotations
-
 from .gui_ytmusic import main
 
 
