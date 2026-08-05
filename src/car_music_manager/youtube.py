@@ -6,7 +6,9 @@ import csv
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
+from .dedupe import canonical_source_key
 from .errors import CarMusicError
 
 
@@ -19,6 +21,17 @@ class SourceEntry:
     duration_seconds: int | None = None
     uploader: str | None = None
     selected: bool = False
+
+
+def _entry_source(entry: dict[str, object]) -> str:
+    source = entry.get("webpage_url") or entry.get("original_url") or entry.get("url")
+    candidate = str(source or "").strip()
+    if candidate and not urlsplit(candidate).scheme and "/" not in candidate:
+        return f"https://www.youtube.com/watch?v={candidate}"
+    if candidate:
+        return candidate
+    video_id = str(entry.get("id") or "").strip()
+    return f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
 
 
 def list_youtube(url: str) -> list[SourceEntry]:
@@ -34,16 +47,31 @@ def list_youtube(url: str) -> list[SourceEntry]:
     with yt_dlp.YoutubeDL(options) as downloader:
         metadata = downloader.extract_info(url, download=False)
     entries = metadata.get("entries") or [metadata]
-    return [
-        SourceEntry(
-            source=str(entry.get("webpage_url") or entry.get("url") or ""),
-            title=str(entry.get("title") or "untitled"),
-            duration_seconds=entry.get("duration"),
-            uploader=entry.get("uploader") or entry.get("channel"),
+
+    results: list[SourceEntry] = []
+    seen: set[str] = set()
+    for raw_entry in entries:
+        if not raw_entry:
+            continue
+        entry = dict(raw_entry)
+        source = _entry_source(entry)
+        identity = canonical_source_key(source)
+        if identity and identity in seen:
+            continue
+        if identity:
+            seen.add(identity)
+        duration = entry.get("duration")
+        results.append(
+            SourceEntry(
+                source=source,
+                title=str(entry.get("title") or "untitled"),
+                duration_seconds=(
+                    int(duration) if isinstance(duration, (int, float)) else None
+                ),
+                uploader=str(entry.get("uploader") or entry.get("channel") or "") or None,
+            )
         )
-        for entry in entries
-        if entry
-    ]
+    return results
 
 
 def export_selection(entries: Iterable[SourceEntry], destination: Path) -> None:
