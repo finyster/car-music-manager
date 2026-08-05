@@ -10,7 +10,6 @@ from mutagen.id3 import (
     APIC,
     COMM,
     ID3,
-    ID3NoHeaderError,
     TALB,
     TCON,
     TDRC,
@@ -19,6 +18,7 @@ from mutagen.id3 import (
     TPE2,
     TPOS,
     TRCK,
+    ID3NoHeaderError,
 )
 from PIL import Image
 
