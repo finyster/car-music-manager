@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from .dedupe import canonical_source_key
 from .errors import CarMusicError
+from .ytdlp_metadata import extract_metadata, extract_with_authentication
 
 
 @dataclass(frozen=True)
@@ -39,13 +40,8 @@ def list_youtube(url: str) -> list[SourceEntry]:
 
     Users are responsible for having permission to download selected sources.
     """
-    try:
-        import yt_dlp
-    except ImportError as error:  # pragma: no cover - packaging protects this
-        raise CarMusicError("yt-dlp is not installed") from error
     options = {"quiet": True, "extract_flat": True, "skip_download": True, "noplaylist": False}
-    with yt_dlp.YoutubeDL(options) as downloader:
-        metadata = downloader.extract_info(url, download=False)
+    metadata = extract_metadata(url, options)
     entries = metadata.get("entries") or [metadata]
 
     results: list[SourceEntry] = []
@@ -88,10 +84,6 @@ def export_selection(entries: Iterable[SourceEntry], destination: Path) -> None:
 
 def download_authorized(url: str, destination: Path) -> Path:
     """Download one authorized source to a controlled temporary directory."""
-    try:
-        import yt_dlp
-    except ImportError as error:  # pragma: no cover
-        raise CarMusicError("yt-dlp is not installed") from error
     destination.mkdir(parents=True, exist_ok=True)
     options = {
         "format": "bestaudio/best",
@@ -100,9 +92,9 @@ def download_authorized(url: str, destination: Path) -> Path:
         "quiet": True,
         "restrictfilenames": False,
     }
-    with yt_dlp.YoutubeDL(options) as downloader:
-        metadata = downloader.extract_info(url, download=True)
-        filename = Path(downloader.prepare_filename(metadata))
+    metadata, prepared_filename = extract_with_authentication(url, options, download=True)
+    assert prepared_filename is not None
+    filename = Path(prepared_filename)
     if not filename.exists():
         candidates = list(destination.glob(f"*-{metadata['id']}.*"))
         if candidates:

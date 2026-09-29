@@ -35,6 +35,7 @@ from .models import ProcessingOptions, TagData
 from .process import process_one
 from .tags import embed_artwork, embed_artwork_jpeg
 from .youtube import download_authorized
+from .ytdlp_metadata import clean_error_text
 from .ytmusic import YTMusicEntry, is_ytmusic_url, list_ytmusic
 
 
@@ -54,7 +55,7 @@ class YTMusicMetadataLoader(QThread):
             try:
                 entries.extend(list_ytmusic(url))
             except Exception as error:  # Qt worker boundary: show concise per-URL errors
-                errors.append(f"{url}: {error}")
+                errors.append(f"{url}: {clean_error_text(error)}")
         self.loaded.emit(entries, errors)
 
 
@@ -215,8 +216,8 @@ class ArtworkProcessingWorker(QThread):
                         self.row_finished.emit(row, "完成", str(output))
                 except Exception as error:  # Batch boundary: continue with remaining rows
                     failed += 1
-                    self.row_finished.emit(row, "失敗", str(error))
-                    self.artwork_finished.emit(row, "未處理", str(error))
+                    self.row_finished.emit(row, "失敗", clean_error_text(error))
+                    self.artwork_finished.emit(row, "未處理", clean_error_text(error))
         self.completed.emit(completed, skipped, failed)
 
 

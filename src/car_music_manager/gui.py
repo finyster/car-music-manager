@@ -41,6 +41,7 @@ from .models import ProcessingOptions, TagData
 from .process import process_one
 from .tags import embed_artwork
 from .youtube import SourceEntry, download_authorized, list_youtube
+from .ytdlp_metadata import clean_error_text
 
 
 @dataclass(frozen=True)
@@ -111,7 +112,7 @@ class MetadataLoader(QThread):
             try:
                 entries.extend(list_youtube(url))
             except Exception as error:  # Qt worker boundary: convert to user-facing text
-                errors.append(f"{url}: {error}")
+                errors.append(f"{url}: {clean_error_text(error)}")
         self.loaded.emit(entries, errors)
 
 
@@ -183,7 +184,7 @@ class ProcessingWorker(QThread):
                     self.row_finished.emit(row, "完成", str(output))
                 except Exception as error:  # Batch boundary: continue with remaining rows
                     failed += 1
-                    self.row_finished.emit(row, "失敗", str(error))
+                    self.row_finished.emit(row, "失敗", clean_error_text(error))
         self.completed.emit(completed, skipped, failed)
 
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .errors import CarMusicError, ValidationError
+from .ytdlp_metadata import MetadataAuthenticationError, clean_error_text, extract_metadata
 
 _TRACKING_QUERY_KEYS = {
     "app",
@@ -184,11 +185,6 @@ def _flatten_entries(
 
 def list_ytmusic(value: str, *, max_entries: int = 500) -> list[YTMusicEntry]:
     """Read YouTube Music metadata without downloading audio or video."""
-    try:
-        import yt_dlp
-    except ImportError as error:  # pragma: no cover - package dependency protects this
-        raise CarMusicError("yt-dlp is not installed") from error
-
     kind = classify_ytmusic_url(value)
     failures: list[str] = []
     for candidate in ytmusic_candidate_urls(value):
@@ -202,13 +198,11 @@ def list_ytmusic(value: str, *, max_entries: int = 500) -> list[YTMusicEntry]:
             "playlistend": max_entries,
         }
         try:
-            with yt_dlp.YoutubeDL(options) as downloader:
-                metadata = downloader.extract_info(candidate, download=False)
+            metadata = extract_metadata(candidate, options)
+        except MetadataAuthenticationError:
+            raise
         except Exception as error:  # yt-dlp boundary; preserve concise fallback diagnostics
-            failures.append(f"{candidate}: {error}")
-            continue
-        if not isinstance(metadata, dict):
-            failures.append(f"{candidate}: no metadata returned")
+            failures.append(f"{candidate}: {clean_error_text(error)}")
             continue
         fallback_album = str(metadata.get("title") or "") if kind == "album" else ""
         entries = _flatten_entries(metadata, fallback_album=fallback_album)

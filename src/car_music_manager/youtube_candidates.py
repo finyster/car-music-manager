@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .inbox import normalize_text
+from .ytdlp_metadata import extract_metadata
 
 _EXCLUDED = re.compile(
     r"\b(cover|karaoke|live|concert|remix|sped\s*up|slowed|loop|instrumental)\b|"
@@ -97,10 +98,6 @@ def candidate_from_entry(artist: str, title: str, entry: dict[str, Any]) -> Yout
 
 def search_youtube(artist: str, title: str, max_candidates: int = 5) -> list[YoutubeCandidate]:
     """Search YouTube metadata only; never download or request media streams."""
-    try:
-        import yt_dlp
-    except ImportError as error:  # pragma: no cover - dependency is declared
-        raise RuntimeError("yt-dlp is not installed") from error
     options = {
         "quiet": True,
         "skip_download": True,
@@ -109,8 +106,7 @@ def search_youtube(artist: str, title: str, max_candidates: int = 5) -> list[You
         "socket_timeout": 15,
     }
     query = f"ytsearch10:{artist} {title} official audio"
-    with yt_dlp.YoutubeDL(options) as downloader:
-        metadata = downloader.extract_info(query, download=False)
+    metadata = extract_metadata(query, options)
     candidates = [
         candidate
         for entry in (metadata.get("entries") or [])
